@@ -1,5 +1,6 @@
 import { select } from 'd3-selection';
 import { line } from 'd3-shape';
+import { pairs } from 'd3-array';
 import { dataJoin as _dataJoin } from '@d3fc/d3fc-data-join';
 
 const identity = (d) => d;
@@ -25,6 +26,7 @@ const axis = (orient, scale) => {
     // the bound data
     const containerTranslate = (scale, trans) => {
         let offset = 0;
+        // for scales that have a bandwidth property, center align ticks
         if (scale.bandwidth) {
             offset = scale.bandwidth() / 2;
             if (scale.round()) {
@@ -78,6 +80,8 @@ const axis = (orient, scale) => {
             const tickFormatter = tickFormat == null ? tryApply('tickFormat', tickArguments, identity) : tickFormat;
             const sign = orient === 'bottom' || orient === 'right' ? 1 : -1;
 
+            const pairedTicks = pairs(ticksArray);
+
             // add the domain line
             const range = scale.range();
             const domainPathData = pathTranspose([
@@ -92,23 +96,26 @@ const axis = (orient, scale) => {
                 .attr('d', svgDomainLine(domainPathData))
                 .attr('stroke', '#000');
 
-            const g = dataJoin(container, ticksArray);
+            const g = dataJoin(container, pairedTicks);
 
             // enter
             g.enter()
-                .attr('transform', containerTranslate(scaleOld, translate))
+                .attr('transform', tickPair => containerTranslate(scaleOld, translate)(tickPair[0]))
                 .append('path')
                 .attr('stroke', '#000');
 
             const labelOffset = sign * (tickSizeInner + tickPadding);
             g.enter()
                 .append('text')
-                .attr('transform',  translate(0, labelOffset))
+                .attr('transform', tickPair => {
+                    const xTranslate = (scale(tickPair[1]) - scale(tickPair[0])) / 2;
+                    return translate(xTranslate, labelOffset);
+                })
                 .attr('fill', '#000');
 
             // exit
             g.exit()
-                .attr('transform', containerTranslate(scale, translate));
+                .attr('transform', tickPair => containerTranslate(scale, translate)(tickPair[0]));
 
             // update
             g.select('path')
@@ -119,7 +126,10 @@ const axis = (orient, scale) => {
                 );
 
             g.select('text')
-               .attr('transform', translate(0, labelOffset))
+               .attr('transform', tickPair => {
+                   const xTranslate = (scale(tickPair[1]) - scale(tickPair[0])) / 2;
+                   return translate(xTranslate, labelOffset);
+               })
                .attr('dy', () => {
                    let offset = '0em';
                    if (isVertical()) {
@@ -129,9 +139,9 @@ const axis = (orient, scale) => {
                    }
                    return offset;
                })
-               .text(tickFormatter);
+               .text(tickPair => tickFormatter(tickPair[0]));
 
-            g.attr('transform', containerTranslate(scale, translate));
+            g.attr('transform', tickPair => containerTranslate(scale, translate)(tickPair[0]));
 
             decorate(g, data, index);
         });
